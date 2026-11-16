@@ -27,7 +27,7 @@ results/            CSVs + one trained GAT per dataset (small)
 ```
 
 ## Reproduce
-Open `notebooks/01_run_experiments_colab.ipynb` in Colab (GPU runtime) and run all, or locally:
+Open [`notebooks/01_run_experiments_colab.ipynb`](https://colab.research.google.com/github/YashDolorase/cs545-gat/blob/main/notebooks/01_run_experiments_colab.ipynb) in Colab (GPU runtime) and run all, or locally:
 ```bash
 pip install -r requirements.txt
 python -m pytest tests -q
