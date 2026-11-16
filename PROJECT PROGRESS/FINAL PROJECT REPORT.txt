@@ -1,0 +1,9 @@
+Your project report is a Jupyter notebook that describes your project, including data, methods, the experiments you performed, and your results.
+
+Remember, the expectation is that you notebook will teach someone unfamiliar with your topic of interest the ideas behind it and should be accessible to someone who has taken the course. 
+
+We you to demonstrate the effectiveness of your chosen model; the experiments should be well thought out, comparing well-reasoned architectures and models to appropriate baselines, to demonstrate the benefit of the deep learning approach you chose to highlight.
+
+Your notebook should be clear and concise; additional data files and supporting scripts can be uploaded in addition to your Jupyter notebook to improve its readability.  Refrain from uploading data that is more than a few Mb in size.
+
+At the end of the notebook, describe team member contributions, how AI was used, as well as any resources you used for the project (e.g. existing code).

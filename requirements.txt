@@ -1,0 +1,9 @@
+# Colab already provides torch, numpy, pandas, matplotlib, scikit-learn, networkx.
+torch>=1.13
+torch_geometric>=2.3
+numpy
+pandas
+matplotlib
+scikit-learn
+networkx
+pytest
