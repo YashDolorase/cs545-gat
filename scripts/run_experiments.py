@@ -53,7 +53,8 @@ def run_e1(args, device):
                 print(f"[E1] {ds_name:9s} {name:6s} seed {seed}: test {m['test_acc']:.3f} "
                       f"(best ep {m['best_epoch']}, {m['ms_per_epoch']:.1f} ms/ep)", flush=True)
                 if name in ("GAT", "GATv2") and seed == 0:  # keep one trained GAT for E2 plots
-                    torch.save(model.state_dict(), os.path.join(args.out, f"{name}_{ds_name}_seed0.pt"))
+                    torch.save({k: v.half() if v.is_floating_point() else v for k, v in model.state_dict().items()},  # fp16 keeps files small
+                               os.path.join(args.out, f"{name}_{ds_name}_seed0.pt"))
 
 
 def run_e3(args, device):
