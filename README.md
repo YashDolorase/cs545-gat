@@ -15,7 +15,9 @@ We explain Graph Attention Networks (GAT; Veličković et al., 2018), implement 
 ## Layout
 ```
 GAT_Project.ipynb                    report notebook (the deliverable)
-notebooks/01_run_experiments_colab.ipynb   runs every experiment on a Colab GPU
+COLAB_RUN_ORDER/                     run on Colab in order: 1 main experiments, 2 stretch, 3 report
+COLAB_RUN_ORDER/Output/              the same notebooks as executed on Colab, with outputs
+notebooks/                           earlier runner notebooks (superseded by COLAB_RUN_ORDER/)
 src/gat_layer.py    GAT layer from scratch + equivalence check with GATConv
 src/models.py       MLP, GCN, GraphSAGE, GAT, GATv2 (paper hyperparameters)
 src/train.py        training loop, early stopping on validation accuracy
@@ -27,7 +29,8 @@ results/            CSVs + one trained GAT per dataset (small)
 ```
 
 ## Reproduce
-Open [`notebooks/01_run_experiments_colab.ipynb`](https://colab.research.google.com/github/YashDolorase/cs545-gat/blob/main/notebooks/01_run_experiments_colab.ipynb) in Colab (GPU runtime) and run all, or locally:
+Upload the notebooks in `COLAB_RUN_ORDER/` to Colab and run them in order (1 and 2 need a T4 GPU runtime; 3 runs on CPU).
+GPU reruns can differ slightly from `results/` (means moved by at most 0.5 points; see report Section 4). Or locally:
 ```bash
 pip install -r requirements.txt
 python -m pytest tests -q

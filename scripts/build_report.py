@@ -21,30 +21,46 @@ def code(s):
 
 # ----------------------------------------------------------------------------- title
 md(r"""
-# Graph Attention Networks: does learning *which* neighbours matter actually help?
+# Graph Attention Networks: does learning which neighbours matter actually help?
 
-**CS545 Final Project — Hansi Yasodara (individual)**  ·  code: <https://github.com/YashDolorase/cs545-gat>
+**CS545 Final Project - Hansi Yasodara (individual)**  ·  code: <https://github.com/YashDolorase/cs545-gat>
 
 Graph neural networks (GNNs) classify a node by mixing its own features with its neighbours'. The question is
-*how much weight each neighbour should get*:
+**how much weight each neighbour should get**:
 
 | Model | Weight of neighbour $j$ when updating node $i$ | Learned? |
 |---|---|---|
-| **GCN** (Kipf & Welling, 2017) | $\frac{1}{\sqrt{(d_i+1)(d_j+1)}}$ — set by node degrees | no |
-| **GraphSAGE**-mean (Hamilton et al., 2017) | $\frac{1}{d_i}$ — plain average (+ separate self weight) | no |
+| **GCN** (Kipf & Welling, 2017) | $\frac{1}{\sqrt{(d_i+1)(d_j+1)}}$ (set by node degrees) | no |
+| **GraphSAGE**-mean (Hamilton et al., 2017) | $\frac{1}{d_i}$ (plain average, plus a separate self weight) | no |
 | **GAT** (Veličković et al., 2018) | $\alpha_{ij}$ = softmax of a learned score of $(h_i, h_j)$ | **yes** |
 
 GAT brings the **attention** idea from the course (transformers) to graphs. Because the weights $\alpha_{ij}$ can be
-read off, we can check *what* GAT has learned, not only how accurate it is.
+read off, we can check what GAT has learned, not only how accurate it is.
+
+**Key term: homophily.** Homophily ("love of the same") describes how often connected nodes belong to the same class.
+In a citation graph, papers mostly cite papers on the same topic. Homophily is high there, so a node's neighbours are good
+evidence for its own label. In a **low-homophily** graph most neighbours have a different label, so copying from them
+misleads. We measure it as **edge homophily** (Section 1).
 
 **Research questions** (from the proposal)
-1. **Accuracy** — Does GAT beat GCN and GraphSAGE on Cora and CiteSeer by more than the variation across random seeds?
-2. **Interpretation** — Are the learned attention weights close to uniform, or concentrated on neighbours of the same class?
-3. **Robustness** — When random (mostly cross-class) edges are added, does GAT degrade more slowly and give those edges less attention?
+1. **Accuracy:** Does GAT beat GCN and GraphSAGE on Cora and CiteSeer by more than the variation across random seeds?
+2. **Interpretation:** Are the learned attention weights close to uniform, or concentrated on neighbours of the same class?
+3. **Robustness:** When random (mostly cross-class) edges are added, does GAT degrade more slowly and give those edges less attention?
 
-**Roadmap.** §1 data · §2 from fixed to learned weights on a toy graph · §3 GAT layer from scratch ·
-§4 training setup · §5 E1 benchmark · §6 E2 attention · §7 E3 noisy neighbours · §8 stretch (GATv2, low-homophily graphs) ·
-§9 conclusions · §10 contributions, AI use, resources.
+**Roadmap**
+
+| Section | Contents |
+|---|---|
+| 1. Data | Cora and CiteSeer citation graphs, edge homophily |
+| 2. From fixed to learned weights | GCN, mean and GAT weights on a toy graph; static vs dynamic attention |
+| 3. GAT layer from scratch | Implementation, verified against PyG's `GATConv` |
+| 4. Models and training | Hyperparameters and training protocol |
+| 5. E1: Benchmark | Accuracy of MLP, GCN, GraphSAGE and GAT over 10 seeds |
+| 6. E2: Attention | Is the learned attention uniform or class-selective? |
+| 7. E3: Noisy neighbours | Accuracy and attention with random edges added |
+| 8. Stretch | GATv2 and low-homophily graphs (Texas, Chameleon) |
+| 9. Conclusions | Answers to the research questions, limitations |
+| 10. Contributions | Use of AI, resources, references |
 """)
 
 md(r"""
@@ -56,7 +72,7 @@ md(r"""
   behaves like a mean aggregator.
 * **E3:** With random edges added, GAT degrades **no more slowly** than GCN. It gives injected edges only ~2 % less attention
   than real ones. GraphSAGE, which keeps a separate weight for a node's own features, is the most robust.
-* **Stretch:** GATv2's *dynamic* attention (§2.3) does not change this. It matches GAT on all four graphs, and its attention is
+* **Stretch:** GATv2's dynamic attention (Section 2.3) does not change this. It matches GAT on all four graphs, and its attention is
   just as class-blind, even on the low-homophily graphs Texas and Chameleon, where GraphSAGE (separate self-weight) is
   clearly best and on Texas even the MLP beats every averaging model.
 """)
@@ -87,7 +103,7 @@ from src.models import CONFIGS, build_model, count_params
 from src.train import train_model, evaluate, get_device
 from src.attention import get_attention, node_attention_stats, normalized_edge_attention
 
-RUN_EXPERIMENTS = False          # True: re-run E1/E3 (+ stretch in §8) instead of loading results/*.csv
+RUN_EXPERIMENTS = False          # True: re-run E1/E3 (+ stretch in Section 8) instead of loading results/*.csv
 DATA, RES = "data", "results"
 if RUN_EXPERIMENTS:
     !python scripts/run_experiments.py --exp e1
@@ -110,8 +126,10 @@ Nodes are papers, edges are citations (treated as undirected), and features are 
 The task is to predict each paper's topic from only **140 (Cora) / 120 (CiteSeer) labelled nodes**, using the standard
 public split from the GCN and GAT papers.
 
-**Edge homophily** is the fraction of edges that join two nodes of the same class. When it is high, simply averaging
-neighbours already pulls nodes towards the right class. This number is the baseline for every attention statistic in §6:
+**Edge homophily** is the fraction of edges that join two nodes of the same class. It ranges from 0 to 1: at 1 every
+edge links two papers on the same topic, and at 0 none does. For example, Cora's 0.81 means that 81 of every 100 citations
+link two papers on the same topic. When it is high, simply averaging
+neighbours already pulls nodes towards the right class. This number is the baseline for every attention statistic in Section 6:
 if GAT spread its attention uniformly, about this share of it would land on same-class neighbours anyway.
 """)
 code(r"""
@@ -137,7 +155,7 @@ $$e_{ij} = \mathrm{LeakyReLU}\big(\mathbf a^\top [\,W h_i \,\Vert\, W h_j\,]\big
 * **Multi-head:** $K$ independent copies (here $K=8$, 8 units each) are concatenated in the hidden layer and averaged
   in the output layer. This stabilises training, much like multi-head self-attention.
 * If every $e_{ij}$ in a neighbourhood is equal, $\alpha_{ij}=1/(d_i+1)$ and GAT **reduces to mean aggregation**.
-  §6 checks how far the trained model is from this.
+  Section 6 checks how far the trained model is from this.
 
 Below we compare the three weightings on a toy graph with two classes (blue = A, orange = B). We hand-set a GAT
 attention vector that likes class-A neighbours.
@@ -183,11 +201,11 @@ GCN and the mean give every neighbour of node 0 roughly the same weight. They di
 fewer links than 4, so GCN gives it slightly more. The hand-set GAT puts most of the weight on the two **same-class**
 neighbours (1, 2). This is the promise of attention: it can ignore neighbours that are unhelpful.
 
-### 2.3 A catch: GAT's attention is *static*
+### 2.3 A catch: GAT's attention is static
 Write $\mathbf a=[\mathbf a_{dst}\Vert\mathbf a_{src}]$. Then $e_{ij}=\mathrm{LeakyReLU}(\mathbf a_{dst}^\top Wh_i+\mathbf a_{src}^\top Wh_j)$.
 The first term is the same for every neighbour of $i$, and LeakyReLU is monotone. So **the ranking of neighbours is set by
 $\mathbf a_{src}^\top Wh_j$ alone and is the same for every query node $i$** (Brody et al., 2022). If GAT likes class-A
-neighbours, it likes them for class-B nodes too. It cannot learn "attend to nodes of *my* class" for both classes at once.
+neighbours, it likes them for class-B nodes too. It cannot learn "attend to nodes of my class" for both classes at once.
 
 GATv2 moves the nonlinearity inside: $e_{ij}=\mathbf a^\top\mathrm{LeakyReLU}(W_{dst}h_i+W_{src}h_j)$. This makes the
 ranking depend on $i$ ("dynamic attention"). The toy check below uses hand-set weights for both models.
@@ -221,7 +239,7 @@ md(r"""
 The static GAT helps node 0 (class A) but **hurts** node 6 (class B): it still favours class-A neighbours, so less of
 node 6's attention lands on its own class than uniform weights would give. GATv2 can raise the same-class share for both.
 Real features are not class indicators, and 8 heads give GAT more freedom than this toy. Even so, this limit is one
-possible reason the trained GAT ends up close to uniform (§6).
+possible reason the trained GAT ends up close to uniform (Section 6).
 """)
 
 # ----------------------------------------------------------------------------- scratch
@@ -252,6 +270,11 @@ completely, so it shows how much the graph itself adds.
 * **Early stopping on validation accuracy** (patience 100, ties broken by validation loss); we report test accuracy of the best-validation weights.
 * **10 seeds** (0–9) per model. Each seed is shared across models, so comparisons are **paired**.
 * E1/E3 ran on a Colab T4 GPU; times are per training epoch on that GPU.
+* **Reruns match closely, but not always to the last digit.** A seed fixes the initial weights, the dropout masks and the noisy
+  graph, but some GPU operations (parallel scatter-sums over edges) add numbers in an unfixed order. An independent full
+  rerun on a T4 reproduced 279 of the 280 E1/E3 runs exactly. In the stretch runs (the denser Chameleon graph, and PyG's
+  `GATv2Conv`), 134 of 170 matched exactly and no model's mean moved by more than 0.5 points (on Texas one test node is
+  2.7 points). No conclusion changed. Rerunning the runner notebooks can therefore give slightly different numbers from `results/`.
 """)
 code(r"""
 cfg = pd.DataFrame(CONFIGS).T
@@ -260,7 +283,7 @@ display(cfg.fillna("").astype(str))
 """)
 
 # ----------------------------------------------------------------------------- E1
-md("## 5. E1 — Benchmark (RQ1)")
+md("## 5. E1: Benchmark (RQ1)")
 code(r"""
 e1 = pd.read_csv(f"{RES}/e1_benchmark.csv")
 MAIN = ["MLP", "GCN", "SAGE", "GAT"]
@@ -287,7 +310,7 @@ for ax, ds in zip(axes, ["Cora", "CiteSeer"]):
 plt.tight_layout(); plt.show()
 """)
 md("**Is the difference bigger than seed-to-seed noise?** Paired comparison over the 10 shared seeds "
-   "(mean difference, paired *t*-test, and how many seeds GAT wins):")
+   "(mean difference, paired t-test, and how many seeds GAT wins):")
 code(r"""
 rows = []
 for ds in ["Cora", "CiteSeer"]:
@@ -305,13 +328,13 @@ md(r"""
   81.5 reported for it. The original 1.5-point gap closes under one shared protocol. Shchur et al. (2018) observed the same
   sensitivity to evaluation setup.
 * GAT does beat GraphSAGE-mean consistently (+1.0 / +1.3 pts, 10/10 and 9/10 seeds).
-* Every graph model beats the MLP by 14–23 points, so the edges matter a lot. *How* neighbours are weighted matters much less.
+* Every graph model beats the MLP by 14–23 points, so the edges matter a lot. How neighbours are weighted matters much less.
 * Cost: GAT has 4× GCN's parameters and is ~2× slower per epoch. It stops earlier, though, so total training time is similar.
 """)
 
 # ----------------------------------------------------------------------------- E2
 md(r"""
-## 6. E2 — What does GAT attend to? (RQ2)
+## 6. E2: What does GAT attend to? (RQ2)
 We load the GAT trained with seed 0 (saved by the E1 run) and read its attention $\alpha_{ij}$ for both layers.
 Unless stated otherwise, values are averaged over heads. For each node $i$ with degree $d_i$:
 * **attention entropy** $H_i=-\sum_j\alpha_{ij}\log\alpha_{ij}$, compared with the **uniform** value $\log(d_i+1)$.
@@ -398,7 +421,7 @@ display(heads.groupby(["dataset", "layer"]).agg(heads=("head", "count"),
         min_entropy_ratio=("entropy / uniform", "min"), max_abs_same_class_gain=("same-class att − fraction", lambda s: s.abs().max())).round(4))
 """)
 md(r"""
-**Why so flat? Look at the raw scores.** Because attention is static (§2.3), node $i$'s weights depend only on how much
+**Why so flat? Look at the raw scores.** Because attention is static (Section 2.3), node $i$'s weights depend only on how much
 the neighbour scores $s_j=\mathbf a_{src}^\top W h_j$ vary across its neighbours. If those scores vary by much less than 1,
 $\exp(\cdot)$ hardly changes and the softmax is close to uniform.
 """)
@@ -422,7 +445,7 @@ md(r"""
 Within a neighbourhood the neighbour scores differ by only ~0.06 (Cora) and ~0.01 (CiteSeer), so
 $\exp(s_j)$ changes by at most a few percent and the softmax returns near-uniform weights. Several things plausibly push
 in this direction: the inputs are sparse, row-normalised bag-of-words vectors; weight decay penalises the attention
-vector $\mathbf a$ like any other weight; dropout of 0.6 is also applied *to the attention weights*, which makes it risky
+vector $\mathbf a$ like any other weight; dropout of 0.6 is also applied to the attention weights, which makes it risky
 to rely on any single neighbour; and only 140 labels are available. Uniform
 attention already fits this graph well (81 % of Cora's edges are same-class). Static attention gives little reason to
 leave that point.
@@ -476,19 +499,19 @@ for ax, (name, mdl) in zip(axes, [("GAT", gats["Cora"]), ("GCN", gcn)]):
     for k in range(7):
         mk = data.y.numpy() == k
         ax.scatter(xy[mk, 0], xy[mk, 1], s=4, color=CLASS_COL[k], label=f"class {k}", linewidths=0)
-    ax.set_title(f"{name} hidden layer (Cora) — silhouette {sil:.3f}"); ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
+    ax.set_title(f"{name} hidden layer (Cora), silhouette {sil:.3f}"); ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
 axes[1].legend(markerscale=3, loc="center left", bbox_to_anchor=(1, .5))
 plt.tight_layout(); plt.show()
 """)
 md(r"""
-**Answer to RQ2: the attention is close to uniform.** It is *not* concentrated on same-class neighbours beyond what
+**Answer to RQ2: the attention is close to uniform.** It is not concentrated on same-class neighbours beyond what
 the graph's homophily already gives. GAT's embeddings show class structure similar to GCN's (silhouette 0.23 vs 0.21; the hidden sizes differ, 64 vs 16). The trained GAT
 works as a well-regularised neighbourhood average, which explains why its accuracy matches GCN's (E1).
 """)
 
 # ----------------------------------------------------------------------------- E3
 md(r"""
-## 7. E3 — Noisy neighbours (RQ3)
+## 7. E3: Noisy neighbours (RQ3)
 We add random undirected edges equal to 0, 10, 25, 50 and 100 % of Cora's 5,278 edges. Pairs are drawn uniformly, so
 with 7 classes ~82 % of the injected edges join different classes. Each seed uses its own noisy graph, shared by all
 models (paired). If attention lets GAT ignore bad neighbours, its curve should fall more slowly, and injected edges
@@ -553,11 +576,12 @@ md(r"""
 md(r"""
 ## 8. Stretch: GATv2 and low-homophily graphs
 Two follow-ups to the finding that attention ≈ averaging:
-1. **GATv2** (dynamic attention, §2.3) on Cora/CiteSeer and on the noisy graphs. Does a more expressive scorer lead to
+1. **GATv2** (dynamic attention, Section 2.3) on Cora/CiteSeer and on the noisy graphs. Does a more expressive scorer lead to
    attention that is less uniform, and to better accuracy or robustness?
-2. **Low-homophily graphs** — *Texas* (WebKB, 183 nodes, homophily ≈ 0.1) and *Chameleon* (Wikipedia, 2,277 nodes,
-   homophily ≈ 0.23). Here most neighbours have a *different* class, so uniform averaging should hurt, which gives
-   attention a reason to be selective. These use the 10 standard Geom-GCN splits (split *k* for seed *k*).
+2. **Low-homophily graphs:** Texas (WebKB, 183 nodes, homophily ≈ 0.1) and Chameleon (Wikipedia, 2,277 nodes,
+   homophily ≈ 0.23). Here most neighbours have a different class (on Texas, a student's page links mostly to course and faculty pages,
+   not to other students' pages), so uniform averaging should hurt, which gives
+   attention a reason to be selective. These use the 10 standard Geom-GCN splits (split k for seed k).
 
 """)
 code(r"""
@@ -605,7 +629,7 @@ plt.tight_layout(); plt.show()
 """)
 md(r"""
 **Does attention become selective when it is needed?** We repeat the E2 analysis for GAT and GATv2 (seed 0) on all four
-graphs. On Texas and Chameleon most neighbours belong to a *different* class, so a model that could tell them apart
+graphs. On Texas and Chameleon most neighbours belong to a different class, so a model that could tell them apart
 should shift attention towards the few same-class neighbours.
 """)
 code(r"""
@@ -648,15 +672,15 @@ md(r"""
 * **Attention stays class-blind, even where it should not.** On Texas only 6.5 % of neighbours share the node's class.
   A selective model would raise that share, but GAT and GATv2 put 6.2–6.5 % of their attention there, which is the
   uniform value. On Chameleon the weights spread out more (5–95 % range up to 0.45–1.45 × uniform), but the spread is
-  *not* aligned with class (same-class attention 0.25 vs fraction 0.25). The extra expressiveness of dynamic attention
+  not aligned with class (same-class attention 0.25 vs fraction 0.25). The extra expressiveness of dynamic attention
   is available, but training does not use it to find same-class neighbours.
 * **On heterophilous graphs, separating self from neighbours matters most.** On Texas the graph-free MLP (80.3 %)
   beats GCN, GAT and GATv2 (58–62 %) by about 20 points: mixing in mostly wrong-class neighbours hurts. GraphSAGE
   (84.3 %) keeps a separate weight for the node's own features and is the best model. On Chameleon GraphSAGE is also
   best (61.9 % vs 57–58 % for the attention models).
 
-This supports the explanation from E2/E3. In these settings the bottleneck is not *which* neighbours to weight. It is
-*how much to trust the neighbourhood at all*, and attention as used in GAT/GATv2 does not learn to answer that from the
+This supports the explanation from E2/E3. In these settings the bottleneck is not which neighbours to weight. It is
+**how much to trust the neighbourhood at all**, and attention as used in GAT/GATv2 does not learn to answer that from the
 few labels available.
 """)
 
@@ -671,9 +695,9 @@ md(r"""
 | **Stretch** GATv2 / low homophily | GATv2 ≈ GAT (no significant difference on 4 graphs); attention stays class-blind even on Texas/Chameleon, where GraphSAGE wins. |
 
 **Takeaways**
-* On homophilous citation graphs, *which* neighbours to trust is not the bottleneck. Averaging is already a good rule,
+* On homophilous citation graphs, which neighbours to trust is not the bottleneck. Averaging is already a good rule,
   and a regularised GAT learns to (nearly) average.
-* GAT's attention is **static**: it ranks neighbours the same way for every query node (§2.3). Making it dynamic (GATv2)
+* GAT's attention is **static**: it ranks neighbours the same way for every query node (Section 2.3). Making it dynamic (GATv2)
   did not help here, so the limit in practice is what training learns from few labels, not only expressiveness.
 * Attention weights are only worth interpreting when they **differ from the uniform baseline**. Always plot them against
   $1/(d_i+1)$ and against the homophily level, never on their own.
@@ -683,6 +707,7 @@ md(r"""
 * Only the standard public splits, one hyperparameter setting per model (taken from the papers), and no tuning. With
   tuning, rankings can change by about a point.
 * E2 analyses one trained model per dataset (seed 0). E3's attention numbers average over all 10 seeds.
+* GPU runs are not bit-for-bit deterministic (see Section 4), so a rerun can move individual results slightly; means changed by ≤ 0.5 points.
 * Random-edge noise is one kind of corruption. Adversarial or feature noise could behave differently.
 """)
 
@@ -695,7 +720,7 @@ experiments, analysis and the write-up.
 **How AI was used.** I used Claude Code (Anthropic) as a coding assistant to help scaffold the code (`src/`, `scripts/`,
 tests), debug the experiment pipeline, and draft parts of this notebook's text and figures. All design decisions follow
 my proposal. I reviewed, ran and checked the code. The from-scratch GAT layer is verified numerically against PyG's
-`GATConv` (§3), and every number in the text comes from the result files in `results/`.
+`GATConv` (Section 3), and every number in the text comes from the result files in `results/`.
 
 **Resources and existing code.**
 * PyTorch and **PyTorch Geometric** (Fey & Lenssen, 2019): datasets, `GCNConv`, `SAGEConv`, `GATv2Conv`, and `GATConv`
@@ -703,13 +728,13 @@ my proposal. I reviewed, ran and checked the code. The from-scratch GAT layer is
 * Hyperparameters from the GCN and GAT papers. Google Colab (T4 GPU) for all experiments.
 
 **References**
-1. P. Veličković et al. *Graph Attention Networks.* ICLR 2018. arXiv:1710.10903
-2. T. Kipf & M. Welling. *Semi-Supervised Classification with Graph Convolutional Networks.* ICLR 2017. arXiv:1609.02907
-3. W. Hamilton, R. Ying & J. Leskovec. *Inductive Representation Learning on Large Graphs.* NeurIPS 2017. arXiv:1706.02216
-4. S. Brody, U. Alon & E. Yahav. *How Attentive are Graph Attention Networks?* ICLR 2022. arXiv:2105.14491
-5. M. Fey & J. E. Lenssen. *Fast Graph Representation Learning with PyTorch Geometric.* 2019. arXiv:1903.02428
-6. O. Shchur et al. *Pitfalls of Graph Neural Network Evaluation.* 2018. arXiv:1811.05868
-7. H. Pei et al. *Geom-GCN: Geometric Graph Convolutional Networks.* ICLR 2020. arXiv:2002.05287 (Texas / Chameleon splits)
+1. P. Veličković et al. "Graph Attention Networks." ICLR 2018. arXiv:1710.10903
+2. T. Kipf & M. Welling. "Semi-Supervised Classification with Graph Convolutional Networks." ICLR 2017. arXiv:1609.02907
+3. W. Hamilton, R. Ying & J. Leskovec. "Inductive Representation Learning on Large Graphs." NeurIPS 2017. arXiv:1706.02216
+4. S. Brody, U. Alon & E. Yahav. "How Attentive are Graph Attention Networks?" ICLR 2022. arXiv:2105.14491
+5. M. Fey & J. E. Lenssen. "Fast Graph Representation Learning with PyTorch Geometric." 2019. arXiv:1903.02428
+6. O. Shchur et al. "Pitfalls of Graph Neural Network Evaluation." 2018. arXiv:1811.05868
+7. H. Pei et al. "Geom-GCN: Geometric Graph Convolutional Networks." ICLR 2020. arXiv:2002.05287 (Texas / Chameleon splits)
 """)
 
 nb = nbf.v4.new_notebook()
